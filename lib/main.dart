@@ -106,62 +106,98 @@ class _FoldersScreenState extends State<FoldersScreen> {
 
     return Card(
       margin: EdgeInsets.all(8),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => CardsScreen(
-                dbHelper: widget.dbHelper,
-                folder: folder,
-              ),
-            ),
-          );
-        },
-        child: Container(
-          width: 200,
-          padding: EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Preview card
-              if (previewCard != null)
-                Container(
-                  height: 100,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          _getSuitIcon(previewCard[DatabaseHelper.cardSuit]),
-                          size: 40,
-                          color: _getSuitColor(previewCard[DatabaseHelper.cardSuit]),
-                        ),
-                        Text(
-                          previewCard[DatabaseHelper.cardName],
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: _getSuitColor(previewCard[DatabaseHelper.cardSuit]),
-                          ),
-                        ),
-                      ],
-                    ),
+      child: Stack(
+        children: [
+          InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CardsScreen(
+                    dbHelper: widget.dbHelper,
+                    folder: folder,
                   ),
                 ),
-              SizedBox(height: 8),
-              // Folder name and card count
-              Text(
-                folder[DatabaseHelper.folderName],
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              );
+            },
+            child: Container(
+              width: 200,
+              padding: EdgeInsets.all(16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Preview card
+                  if (previewCard != null)
+                    Container(
+                      height: 100,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _getSuitIcon(previewCard[DatabaseHelper.cardSuit]),
+                              size: 40,
+                              color: _getSuitColor(previewCard[DatabaseHelper.cardSuit]),
+                            ),
+                            Text(
+                              previewCard[DatabaseHelper.cardName],
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: _getSuitColor(previewCard[DatabaseHelper.cardSuit]),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  SizedBox(height: 8),
+                  // Folder name and card count
+                  Text(
+                    folder[DatabaseHelper.folderName],
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '$cardCount cards',
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                ],
               ),
-              Text(
-                '$cardCount cards',
-                style: TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-            ],
+            ),
           ),
-        ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton(
+              icon: Icon(Icons.delete, color: Colors.red),
+              onPressed: () => _showDeleteFolderConfirmation(folder),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteFolderConfirmation(Map<String, dynamic> folder) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Folder'),
+        content: Text('Are you sure you want to delete this folder and all its cards?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await widget.dbHelper.deleteFolder(folder[DatabaseHelper.folderId]);
+              Navigator.pop(context);
+              _loadData();
+            },
+            child: Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }
@@ -249,45 +285,64 @@ class _CardsScreenState extends State<CardsScreen> {
   void _showAddCardDialog() {
     nameController.clear();
     suitController.text = widget.folder[DatabaseHelper.folderName];
+    
+    // Create a list of available cards
+    final availableCards = [
+      'Ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King'
+    ];
+    
+    String selectedCard = availableCards.first;
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add New Card'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: InputDecoration(labelText: 'Card Name'),
-            ),
-            TextField(
-              controller: suitController,
-              decoration: InputDecoration(labelText: 'Suit'),
-              readOnly: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Add New Card'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: selectedCard,
+                decoration: InputDecoration(labelText: 'Select Card'),
+                items: availableCards.map((card) {
+                  return DropdownMenuItem(
+                    value: card,
+                    child: Text('$card of ${widget.folder[DatabaseHelper.folderName]}'),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    selectedCard = value!;
+                  });
+                },
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Suit: ${widget.folder[DatabaseHelper.folderName]}',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () async {
-              if (nameController.text.isNotEmpty) {
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
                 await widget.dbHelper.insertCard({
-                  DatabaseHelper.cardName: nameController.text,
-                  DatabaseHelper.cardSuit: suitController.text,
-                  DatabaseHelper.cardImageUrl: '${nameController.text.toLowerCase()}_${suitController.text.toLowerCase()}',
+                  DatabaseHelper.cardName: selectedCard,
+                  DatabaseHelper.cardSuit: widget.folder[DatabaseHelper.folderName],
+                  DatabaseHelper.cardImageUrl: '${selectedCard.toLowerCase()}_of_${widget.folder[DatabaseHelper.folderName].toLowerCase()}',
                   DatabaseHelper.cardFolderId: widget.folder[DatabaseHelper.folderId],
                 });
                 Navigator.pop(context);
                 _loadCards();
-              }
-            },
-            child: Text('Add'),
-          ),
-        ],
+              },
+              child: Text('Add'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -347,46 +402,65 @@ class _CardsScreenState extends State<CardsScreen> {
   void _showEditCardDialog(Map<String, dynamic> card) {
     nameController.text = card[DatabaseHelper.cardName];
     suitController.text = card[DatabaseHelper.cardSuit];
+    
+    // Create a list of available cards
+    final availableCards = [
+      'Ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King'
+    ];
+    
+    String selectedCard = card[DatabaseHelper.cardName];
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Edit Card'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: InputDecoration(labelText: 'Card Name'),
-            ),
-            TextField(
-              controller: suitController,
-              decoration: InputDecoration(labelText: 'Suit'),
-              readOnly: true,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Edit Card'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: selectedCard,
+                decoration: InputDecoration(labelText: 'Select Card'),
+                items: availableCards.map((card) {
+                  return DropdownMenuItem(
+                    value: card,
+                    child: Text('$card of ${widget.folder[DatabaseHelper.folderName]}'),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    selectedCard = value!;
+                  });
+                },
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Suit: ${widget.folder[DatabaseHelper.folderName]}',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () async {
-              if (nameController.text.isNotEmpty) {
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
                 await widget.dbHelper.updateCard({
                   DatabaseHelper.cardId: card[DatabaseHelper.cardId],
-                  DatabaseHelper.cardName: nameController.text,
-                  DatabaseHelper.cardSuit: suitController.text,
-                  DatabaseHelper.cardImageUrl: '${nameController.text.toLowerCase()}_${suitController.text.toLowerCase()}',
+                  DatabaseHelper.cardName: selectedCard,
+                  DatabaseHelper.cardSuit: widget.folder[DatabaseHelper.folderName],
+                  DatabaseHelper.cardImageUrl: '${selectedCard.toLowerCase()}_of_${widget.folder[DatabaseHelper.folderName].toLowerCase()}',
                   DatabaseHelper.cardFolderId: widget.folder[DatabaseHelper.folderId],
                 });
                 Navigator.pop(context);
                 _loadCards();
-              }
-            },
-            child: Text('Update'),
-          ),
-        ],
+              },
+              child: Text('Update'),
+            ),
+          ],
+        ),
       ),
     );
   }
