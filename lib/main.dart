@@ -73,6 +73,9 @@ class _FoldersScreenState extends State<FoldersScreen> {
   Map<int, int> cardCounts = {};
   Map<int, Map<String, dynamic>> previewCards = {};
 
+  // Available suits for new folders
+  final List<String> availableSuits = ['Hearts', 'Spades', 'Diamonds', 'Clubs'];
+
   @override
   void initState() {
     super.initState();
@@ -230,6 +233,88 @@ class _FoldersScreenState extends State<FoldersScreen> {
     }
   }
 
+  void _showAddFolderDialog() {
+    String selectedSuit = availableSuits.first;
+    
+    // Check which suits are already used
+    final existingSuits = folders.map((f) => f[DatabaseHelper.folderName] as String).toSet();
+    final availableSuitsFiltered = availableSuits.where((suit) => !existingSuits.contains(suit)).toList();
+    
+    if (availableSuitsFiltered.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Cannot Create Folder'),
+          content: Text('All suit folders have already been created.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
+    selectedSuit = availableSuitsFiltered.first;
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Create New Folder'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                value: selectedSuit,
+                decoration: InputDecoration(labelText: 'Select Suit'),
+                items: availableSuitsFiltered.map((suit) {
+                  return DropdownMenuItem(
+                    value: suit,
+                    child: Row(
+                      children: [
+                        Icon(
+                          _getSuitIcon(suit),
+                          color: _getSuitColor(suit),
+                        ),
+                        SizedBox(width: 8),
+                        Text(suit),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    selectedSuit = value!;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                await widget.dbHelper.insertFolder({
+                  DatabaseHelper.folderName: selectedSuit,
+                  DatabaseHelper.folderTimestamp: DateTime.now().toIso8601String(),
+                });
+                Navigator.pop(context);
+                _loadData();
+              },
+              child: Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -246,6 +331,10 @@ class _FoldersScreenState extends State<FoldersScreen> {
         ),
         itemCount: folders.length,
         itemBuilder: (context, index) => _buildFolderCard(folders[index]),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddFolderDialog,
+        child: Icon(Icons.create_new_folder),
       ),
     );
   }
@@ -269,6 +358,10 @@ class _CardsScreenState extends State<CardsScreen> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController suitController = TextEditingController();
 
+  // Add constants for card limits
+  static const int MIN_CARDS = 3;
+  static const int MAX_CARDS = 6;
+
   @override
   void initState() {
     super.initState();
@@ -280,9 +373,36 @@ class _CardsScreenState extends State<CardsScreen> {
     setState(() {
       cards = cardsData;
     });
+
+    // Check minimum card count after loading
+    if (cards.length < MIN_CARDS) {
+      _showWarningDialog("You need at least 3 cards in this folder.");
+    }
+  }
+
+  void _showWarningDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Warning'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddCardDialog() {
+    // Check maximum card count before showing add dialog
+    if (cards.length >= MAX_CARDS) {
+      _showWarningDialog("This folder can only hold 6 cards.");
+      return;
+    }
+
     nameController.clear();
     suitController.text = widget.folder[DatabaseHelper.folderName];
     
@@ -329,7 +449,7 @@ class _CardsScreenState extends State<CardsScreen> {
               child: Text('Cancel'),
             ),
             TextButton(
-              onPressed: () async {
+                      onPressed: () async {
                 await widget.dbHelper.insertCard({
                   DatabaseHelper.cardName: selectedCard,
                   DatabaseHelper.cardSuit: widget.folder[DatabaseHelper.folderName],
@@ -466,6 +586,12 @@ class _CardsScreenState extends State<CardsScreen> {
   }
 
   void _showDeleteConfirmation(Map<String, dynamic> card) {
+    // Check if deletion would violate minimum card count
+    if (cards.length <= MIN_CARDS) {
+      _showWarningDialog("You need at least 3 cards in this folder.");
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -522,6 +648,17 @@ class _CardsScreenState extends State<CardsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('${widget.folder[DatabaseHelper.folderName]} Cards'),
+        actions: [
+          Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                '${cards.length}/${MAX_CARDS} cards',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ),
+        ],
       ),
       body: GridView.builder(
         padding: EdgeInsets.all(8),
