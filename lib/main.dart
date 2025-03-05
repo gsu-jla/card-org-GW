@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'dart:io' show Platform;
 import 'database_helper.dart';
 
 // Card icons mapping
@@ -30,8 +32,10 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize FFI for desktop
-  sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
+  if (Platform.isWindows || Platform.isLinux) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   
   final dbHelper = DatabaseHelper();
   await dbHelper.init();
